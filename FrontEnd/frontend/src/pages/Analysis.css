@@ -38,7 +38,7 @@
   left: 0;
   width: 100%;
   display: flex;
-  justify-content: space-between;
+  justify-content: right;
   padding: 0 20px;
   z-index: 10;
   box-sizing: border-box;

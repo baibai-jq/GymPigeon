@@ -48,9 +48,6 @@ function Analysis() {
       
       {/* The UI Layer */}
       <div className="ui-controls">
-        <div className="status-badge">
-            {isReady ? "● AI ACTIVE" : "LOADING AI..."}
-        </div>
         <button className="exit-btn" onClick={() => navigate('/home')}>
           End Session
         </button>
