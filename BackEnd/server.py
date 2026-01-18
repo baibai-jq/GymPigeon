@@ -9,6 +9,8 @@ from landmarks import PoseTracker
 from poseDetection import PoseDetection, ExerciseType, FormEvaluation
 import numpy as np
 
+from text_to_speech import speak
+
 app = FastAPI()
 
 def extract_points_from_result(result, tracker, h, w):
@@ -232,6 +234,19 @@ async def websocket_endpoint(websocket: WebSocket):
                     print(f"\n{evaluation.feedback_message}")
                     print('='*60)
                     
+                    # Audio Feedback Logic 
+                    if evaluation.is_correct:
+                        # Option A: Simple praise
+                        speak(f"Good rep!")
+                    else:
+                        # Option B: Speak only the PRIMARY error
+                        if evaluation.errors:
+                            # Reads: "Correction needed. Not deep enough."
+                            speak(f"Correction. {evaluation.errors[0]}")
+                        else:
+                            speak("Check your form.")
+                    
+
                     # Send evaluation to client (as separate message)
                     eval_data = {
                         "type": "evaluation",

@@ -297,19 +297,19 @@ class PoseDetection:
         
         # Check squat depth
         if min_knee > criteria["knee_max"]:
-            errors.append(f"Not deep enough: Squat to at least {criteria['knee_max']}° knee angle (achieved {min_knee:.0f}°)")
+            errors.append(f"Not deep enough: Squat to at least {criteria['knee_max']}°") # knee angle (achieved {min_knee:.0f}°)
         elif min_knee < criteria["knee_min"]:
-            warnings.append(f"Very deep squat: {min_knee:.0f}° (standard range: {criteria['knee_min']}-{criteria['knee_max']}°)")
+            warnings.append(f"Squat is too deep") # Very deep squat: {min_knee:.0f}° (standard range: {criteria['knee_min']}-{criteria['knee_max']}°)
         
         # Check hip hinge
         if min_hip > criteria["hip_max"]:
-            errors.append(f"Not sitting back enough: Hip angle {min_hip:.0f}° (target: {criteria['hip_min']}-{criteria['hip_max']}°)")
+            errors.append(f"Not sitting back enough: Stick your butt out more") # Hip angle {min_hip:.0f}° (target: {criteria['hip_min']}-{criteria['hip_max']}°)
         elif min_hip < criteria["hip_min"]:
             errors.append(f"Leaning too far forward: Hip angle {min_hip:.0f}°")
         
         # Check back straightness
         if min_shoulder < criteria["back_min"]:
-            errors.append(f"Back rounding detected: Keep chest up and maintain {criteria['back_min']}°+ back angle (detected {min_shoulder:.0f}°)")
+            errors.append(f"Back rounding detected: Keep chest up ") # and maintain {criteria['back_min']}°+ back angle (detected {min_shoulder:.0f}°)
         
         # Check knee-hip relationship
         if min_hip > min_knee + criteria["knee_forward_threshold"]:
@@ -342,7 +342,7 @@ class PoseDetection:
         
         # Check elbow bend depth
         if min_elbow > criteria["elbow_max"]:
-            errors.append(f"Not lowering bar enough: Lower to chest level ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)")
+            errors.append(f"Not lowering bar enough: Lower to chest level") # ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)
         elif min_elbow < criteria["elbow_min"]:
             warnings.append(f"Very deep press: {min_elbow:.0f}° elbow angle")
         
@@ -350,11 +350,11 @@ class PoseDetection:
         if back_angles:
             avg_back = np.mean(back_angles)
             if avg_back < criteria["back_arch_min"] or avg_back > criteria["back_arch_max"]:
-                errors.append(f"Back position: Maintain slight arch ({criteria['back_arch_min']}-{criteria['back_arch_max']}°, detected {avg_back:.0f}°)")
+                errors.append(f"Back position: Maintain slight arch") # ({criteria['back_arch_min']}-{criteria['back_arch_max']}°, detected {avg_back:.0f}°)
         
         # Check arm angle from body (not too wide)
         if arm_body < criteria["arm_angle_min"]:
-            errors.append(f"Arms too close to body: Widen your grip (arm angle {arm_body:.0f}°)")
+            errors.append(f"Arms too close to body: Widen your grip") # (arm angle {arm_body:.0f}°)
         elif arm_body > criteria["arm_angle_max"]:
             errors.append(f"Arms too wide: Narrow your grip to ~45-75° from body (detected {arm_body:.0f}°)")
         
@@ -380,7 +380,7 @@ class PoseDetection:
         
         # Check elbow bend depth
         if min_elbow > criteria["elbow_max"]:
-            errors.append(f"Not going down enough: Lower chest to ground ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)")
+            errors.append(f"Not going down enough: Lower chest to ground") # ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)
         elif min_elbow < criteria["elbow_min"]:
             warnings.append(f"Very deep push-up: {min_elbow:.0f}° elbow angle")
         
@@ -388,7 +388,7 @@ class PoseDetection:
         if back_angles:
             avg_back = np.mean(back_angles)
             if avg_back < criteria["back_min"]:
-                errors.append(f"Hips sagging: Keep core tight and body straight (hip angle {avg_back:.0f}°, target {criteria['back_min']}°+)")
+                errors.append(f"Hips sagging: Keep core tight and body straight ") # (hip angle {avg_back:.0f}°, target {criteria['back_min']}°+)
             elif avg_back > criteria["back_max"]:
                 errors.append(f"Hips too high: Lower hips to form straight line from head to heels")
         
@@ -396,7 +396,7 @@ class PoseDetection:
         if shoulder_angles:
             avg_shoulder = np.mean(shoulder_angles)
             if avg_shoulder < criteria["shoulder_stability_min"]:
-                errors.append(f"Shoulders unstable: Keep shoulder blades retracted (detected {avg_shoulder:.0f}°)")
+                errors.append(f"Shoulders unstable: Keep shoulder blades retracted") # (detected {avg_shoulder:.0f}°)
         
         # Check arm placement (should be roughly shoulder-width)
         warnings.append("Ensure hands are shoulder-width apart")
