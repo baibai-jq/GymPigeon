@@ -4,6 +4,7 @@ Handles: Squats, Bench Press, Push-ups (all from side view - 90 degrees)
 """
 
 import numpy as np
+from collections import deque
 from typing import Dict, List, Tuple, Optional
 from dataclasses import dataclass
 from enum import Enum
@@ -50,6 +51,20 @@ class PoseDetection:
         self.rep_count = 0
         self.current_rep: Optional[RepData] = None
         self.completed_reps: List[RepData] = []
+        # Smoothing window for back alignment (median filter)
+        self.back_window = deque(maxlen=7)  # keep last 7 frames
+        self.window_size = 7
+
+        # Last recorded angles to detect impossible jumps
+        self.last_angles: Dict[str, float] = {}
+        self.angle_jump_threshold = 30.0  # degrees per frame considered impossible
+
+        # Bottom hold counters to require holding bottom for a few frames
+        self.bottom_hold_counter = 0
+        self.bottom_hold_required = 3
+
+        # Shoulder side-view warning cooldown to avoid spamming
+        self.shoulder_warning_cooldown = 0
         
         # Define required landmarks for each exercise (side view)
         self.REQUIRED_LANDMARKS = {
@@ -159,6 +174,9 @@ class PoseDetection:
                 points[f"{side}_knee"],
                 points[f"{side}_ankle"]
             )
+            # record raw Y positions for relative depth checks (image coords: larger Y is lower)
+            angles["hip_y"] = points[f"{side}_hip"][1]
+            angles["knee_y"] = points[f"{side}_knee"][1]
         
         # Hip angle (shoulder-hip-knee)
         if all(f"{side}_{lm}" in points for lm in ["shoulder", "hip", "knee"]):
@@ -273,7 +291,9 @@ class PoseDetection:
         criteria = self.FORM_CRITERIA[ExerciseType.SQUAT]
         min_knee = rep_data.min_angles.get("knee", 180)
         min_hip = rep_data.min_angles.get("hip", 180)
-        min_shoulder = rep_data.min_angles.get("shoulder", 180)
+        # Use smoothed back alignment if available to reduce jitter
+        back_list = rep_data.phase_angles.get("back_alignment_smoothed", []) or rep_data.phase_angles.get("back_alignment", [])
+        min_shoulder = min(back_list) if back_list else rep_data.min_angles.get("shoulder", 180)
         
         # Check squat depth
         if min_knee > criteria["knee_max"]:
@@ -294,6 +314,16 @@ class PoseDetection:
         # Check knee-hip relationship
         if min_hip > min_knee + criteria["knee_forward_threshold"]:
             errors.append("Hips too high: Squat deeper and sit back more")
+
+        # Relative depth check using Y coordinates collected during rep
+        hip_ys = rep_data.phase_angles.get("hip_y", [])
+        knee_ys = rep_data.phase_angles.get("knee_y", [])
+        if hip_ys and knee_ys:
+            # bottom positions should show hip lower (greater Y) than knee
+            hip_bottom = max(hip_ys)
+            knee_bottom = max(knee_ys)
+            if hip_bottom <= knee_bottom + 5:  # allow small pixel tolerance
+                errors.append("Insufficient depth: Hips did not drop below knees. Drive hips downward until crease is below the knee.")
         
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.SQUAT, errors, warnings)
@@ -413,26 +443,94 @@ class PoseDetection:
             warning = self.get_repositioning_message(exercise, missing)
             return None, warning
         
-        # Extract angles
+        # Extract angles and some raw coordinates
         angles = self.extract_angles(points)
-        
-        # Detect phase
-        new_phase = self.detect_phase(angles, exercise)
-        
-        # Start rep when transitioning from READY to DESCENDING
+
+        # Side-view shoulder check (if both shoulders present)
+        shoulder_warning = None
+        if "right_shoulder" in points and "left_shoulder" in points:
+            rx, ry = points["right_shoulder"]
+            lx, ly = points["left_shoulder"]
+            dx = abs(rx - lx)
+            # approximate torso height for scale (if hip present)
+            torso_h = None
+            if "right_hip" in points:
+                torso_h = abs(points["right_hip"][1] - ((ry+ly)/2))
+            if torso_h is None or torso_h <= 0:
+                torso_h = 200.0
+            # If shoulders are separated too much horizontally, user isn't perfectly sideways
+            if dx > max(50, 0.15 * torso_h):
+                # throttle warnings to reduce spam
+                if self.shoulder_warning_cooldown <= 0:
+                    shoulder_warning = "⚠ You appear rotated — ensure you're directly SIDEWAYS to camera (shoulders overlapping)."
+                    self.shoulder_warning_cooldown = 30
+
+        # Smooth back alignment using median of recent frames
+        if "back_alignment" in angles:
+            try:
+                self.back_window.append(float(angles["back_alignment"]))
+                smoothed_back = float(np.median(np.array(self.back_window)))
+                angles["back_alignment_smoothed"] = smoothed_back
+            except Exception:
+                angles["back_alignment_smoothed"] = angles["back_alignment"]
+
+        # Anatomical jitter filter: ignore impossible angle jumps
+        for k, v in list(angles.items()):
+            # only apply to angle-like keys
+            if not isinstance(v, (int, float)):
+                continue
+            if k.endswith("_y"):
+                # allow raw coords to vary freely
+                self.last_angles[k] = v
+                continue
+            last = self.last_angles.get(k)
+            if last is not None:
+                if abs(v - last) > self.angle_jump_threshold:
+                    # treat as jitter: keep last reliable value instead of sudden jump
+                    angles[k] = last
+                else:
+                    self.last_angles[k] = v
+            else:
+                self.last_angles[k] = v
+
+        # Preliminary phase detection from angles
+        prelim_phase = self.detect_phase(angles, exercise)
+
+        # Handle bottom-hold persistence to avoid bounce counting
+        new_phase = prelim_phase
+        if prelim_phase == RepPhase.BOTTOM:
+            self.bottom_hold_counter += 1
+            if self.bottom_hold_counter < self.bottom_hold_required:
+                # still qualifying as descending until held sufficiently
+                new_phase = RepPhase.DESCENDING if self.current_phase in (RepPhase.READY, RepPhase.DESCENDING) else self.current_phase
+            else:
+                new_phase = RepPhase.BOTTOM
+        else:
+            self.bottom_hold_counter = 0
+
+        # Relative depth check for squats: ensure hip drops below knee (image coords increase downward)
+        if exercise == ExerciseType.SQUAT and "hip_y" in angles and "knee_y" in angles:
+            hip_bottom = max(self.last_angles.get("hip_y", angles["hip_y"]), angles["hip_y"])
+            knee_at_bottom = max(self.last_angles.get("knee_y", angles["knee_y"]), angles["knee_y"])
+            # require hip to be meaningfully below knee to count as bottom
+            if new_phase == RepPhase.BOTTOM and hip_bottom <= knee_at_bottom + 5:
+                # Not actually below knee; treat as descending (not true bottom)
+                new_phase = RepPhase.DESCENDING
+
+        # Phase transition: start rep when transitioning from READY to DESCENDING
         if self.last_phase == RepPhase.READY and new_phase == RepPhase.DESCENDING:
             self.start_rep(exercise, timestamp)
-        
-        # Record angles during rep
+
+        # Record angles during rep (if any)
         if self.current_rep:
             self.record_angles(angles)
-        
+
         # Complete rep when returning to READY from ASCENDING
         evaluation = None
         if self.last_phase == RepPhase.ASCENDING and new_phase == RepPhase.READY:
             if self.current_rep:
                 rep_data = self.complete_rep(timestamp)
-                
+
                 # Evaluate the completed rep
                 if exercise == ExerciseType.SQUAT:
                     evaluation = self.evaluate_squat(rep_data)
@@ -440,12 +538,17 @@ class PoseDetection:
                     evaluation = self.evaluate_bench_press(rep_data)
                 elif exercise == ExerciseType.PUSHUP:
                     evaluation = self.evaluate_pushup(rep_data)
-        
+
+        # Decrease shoulder warning cooldown
+        if self.shoulder_warning_cooldown > 0:
+            self.shoulder_warning_cooldown -= 1
+
         # Update phase tracking
         self.last_phase = self.current_phase
         self.current_phase = new_phase
-        
-        return evaluation, None
+
+        # Prefer returning shoulder rotation warning if any
+        return evaluation, shoulder_warning
     
     def reset(self):
         """Reset all tracking data"""
