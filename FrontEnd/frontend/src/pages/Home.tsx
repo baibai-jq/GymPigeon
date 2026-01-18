@@ -34,8 +34,8 @@ function Home() {
       {/* Header */}
       <header className="home-header">
         <div className="header-text">
-          <h1>Welcome back, Champ! 🦅</h1>
-          <p>Your AI form coach is ready.</p>
+          <h1>Welcome back!</h1>
+          <p>Your gym buddy is ready for today's session.</p>
         </div>
         <div className="points-badge">450 pts</div>
       </header>
