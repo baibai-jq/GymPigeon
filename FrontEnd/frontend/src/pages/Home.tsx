@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './Home.css';
 const BarbellSquat = 'BarbellSquat.png'
+const Pushup = 'Pushup.png'
+const BenchPress = 'BenchPress.png'
 
 const SAVED_WORKOUTS = [
   { id: 1, title: "Morning Squat Blitz", duration: "15 min", difficulty: "Easy", reps: 50 },
@@ -20,8 +22,8 @@ function Home() {
 
   const exercises = [
     { id: 'squat', name: 'Barbell Squat', image: BarbellSquat },
-    { id: 'pushup', name: 'Push Up', image: BarbellSquat },
-    { id: 'bench', name: 'Bench Press', image: BarbellSquat }
+    { id: 'pushup', name: 'Push Up', image: Pushup },
+    { id: 'bench', name: 'Bench Press', image: BenchPress}
   ];
 
   const handleExerciseSelect = (id: string) => {
