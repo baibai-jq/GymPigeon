@@ -70,7 +70,7 @@ class PoseDetection:
         self.REQUIRED_LANDMARKS = {
             ExerciseType.SQUAT: ["shoulder", "hip", "knee", "ankle"],
             ExerciseType.BENCH_PRESS: ["shoulder", "elbow", "wrist", "hip"],
-            ExerciseType.PUSHUP: ["shoulder", "elbow", "wrist", "hip", "knee"]
+            ExerciseType.PUSHUP: ["shoulder", "elbow", "wrist", "hip", "ankle"]
         }
         
         # Form criteria for each exercise
@@ -80,29 +80,29 @@ class PoseDetection:
         """Initialize angle criteria for proper form"""
         return {
             ExerciseType.SQUAT: {
-                "knee_min": 70,    # Minimum knee bend at bottom
-                "knee_max": 110,   # Maximum knee bend (too deep)
-                "hip_min": 30,     # Very loose: Minimum hip angle (sitting back)
-                "hip_max": 120,    # Very loose: Maximum hip angle at bottom
-                "back_min": 100,   # Very loose: Back straightness (shoulder-hip-knee)
-                "knee_forward_threshold": 30  # Very loose: Knee shouldn't go too far forward
+                "knee_min": 70,
+                "knee_max": 110,
+                "hip_min": 30,
+                "hip_max": 120,
+                "back_min": 100,
+                "knee_forward_threshold": 30
             },
             ExerciseType.BENCH_PRESS: {
-                "elbow_min": 70,   # Minimum elbow bend
-                "elbow_max": 110,  # Maximum elbow bend at bottom
-                "back_arch_min": 150,  # Slight arch in back
+                "elbow_min": 70,
+                "elbow_max": 110,
+                "back_arch_min": 150,
                 "back_arch_max": 175,
-                "arm_angle_min": 45,   # Arm angle from body (not too wide)
+                "arm_angle_min": 45,
                 "arm_angle_max": 75,
-                "bar_path_deviation": 10  # Maximum horizontal deviation
+                "bar_path_deviation": 10
             },
             ExerciseType.PUSHUP: {
-                "elbow_min": 70,   # Minimum elbow bend
-                "elbow_max": 110,  # Maximum elbow bend at bottom
-                "back_min": 160,   # Back should be straight (hip angle)
+                "elbow_min": 70,
+                "elbow_max": 110,
+                "back_min": 160,
                 "back_max": 180,
-                "shoulder_stability_min": 135,  # Looser: Shoulders shouldn't sag
-                "body_alignment_min": 160  # Overall body alignment
+                "shoulder_stability_min": 135,
+                "body_alignment_min": 160
             }
         }
     
@@ -166,6 +166,13 @@ class PoseDetection:
         
         # Determine which side is visible (prefer right, fall back to left)
         side = "right" if f"right_shoulder" in points else "left"
+        
+        # Store shoulder and elbow Y positions FIRST (needed for push-ups)
+        if f"{side}_shoulder" in points:
+            angles["shoulder_y"] = points[f"{side}_shoulder"][1]
+        
+        if f"{side}_elbow" in points:
+            angles["elbow_y"] = points[f"{side}_elbow"][1]
         
         # Knee angle
         if all(f"{side}_{lm}" in points for lm in ["hip", "knee", "ankle"]):
@@ -233,7 +240,7 @@ class PoseDetection:
             else:
                 return RepPhase.ASCENDING
         
-        elif exercise in [ExerciseType.BENCH_PRESS, ExerciseType.PUSHUP]:
+        elif exercise == ExerciseType.BENCH_PRESS:
             elbow_angle = angles.get("elbow", 180)
             if elbow_angle >= 140:
                 return RepPhase.READY
@@ -243,6 +250,89 @@ class PoseDetection:
                 return RepPhase.DESCENDING
             else:
                 return RepPhase.ASCENDING
+
+        elif exercise == ExerciseType.PUSHUP:
+            # Use shoulder height (Y position) to detect push-up phases
+            # In side view during push-up:
+            # - READY/TOP: shoulder is HIGH (small Y value) - body elevated
+            # - BOTTOM: shoulder is LOW (large Y value) - body near ground
+            shoulder_y = angles.get("shoulder_y")
+            elbow_angle = angles.get("elbow", 180)
+            
+            if shoulder_y is not None:
+                # Track previous shoulder height for direction detection
+                if not hasattr(self, '_last_shoulder_y'):
+                    self._last_shoulder_y = shoulder_y
+                    self._shoulder_baseline = shoulder_y
+                    self._pushup_bottom_reached = False
+                
+                # Calculate movement direction
+                delta_y = shoulder_y - self._last_shoulder_y
+                
+                # DEBUG: Print the values
+                print(f"[PUSHUP DEBUG] Shoulder Y: {shoulder_y:.1f}, Last: {self._last_shoulder_y:.1f}, Delta: {delta_y:.1f}, Elbow: {elbow_angle:.1f}, Current Phase: {self.current_phase.value}")
+                
+                # State machine for push-up phases
+                if self.current_phase == RepPhase.READY:
+                    # Update baseline when in ready position
+                    if shoulder_y < self._shoulder_baseline:
+                        self._shoulder_baseline = shoulder_y
+                    
+                    # Start descending when shoulder drops significantly
+                    if shoulder_y > self._shoulder_baseline + 50:
+                        phase = RepPhase.DESCENDING
+                        self._pushup_bottom_reached = False
+                    else:
+                        phase = RepPhase.READY
+                
+                elif self.current_phase == RepPhase.DESCENDING:
+                    # Check if we've reached bottom (shoulder stopped descending)
+                    # Bottom is reached when shoulder stops moving down significantly
+                    if delta_y < 2 and (shoulder_y > self._shoulder_baseline + 100):
+                        # Mark that we've been to bottom
+                        self._pushup_bottom_reached = True
+                        phase = RepPhase.BOTTOM
+                    # Or if shoulder starts moving back up, we're ascending
+                    elif delta_y < -5:
+                        phase = RepPhase.ASCENDING
+                    else:
+                        phase = RepPhase.DESCENDING
+                
+                elif self.current_phase == RepPhase.BOTTOM:
+                    # Start ascending when shoulder moves up
+                    if delta_y < -5:
+                        phase = RepPhase.ASCENDING
+                    else:
+                        phase = RepPhase.BOTTOM
+                
+                elif self.current_phase == RepPhase.ASCENDING:
+                    # Return to ready when close to baseline
+                    if shoulder_y < self._shoulder_baseline + 40:
+                        phase = RepPhase.READY
+                        self._pushup_bottom_reached = False
+                    # If still moving down, back to descending
+                    elif delta_y > 5:
+                        phase = RepPhase.DESCENDING
+                    else:
+                        phase = RepPhase.ASCENDING
+                
+                else:
+                    phase = RepPhase.READY
+                
+                self._last_shoulder_y = shoulder_y
+                print(f"[PUSHUP DEBUG] Detected Phase: {phase.value}")
+                return phase
+            else:
+                # Fallback to elbow angle if Y positions not available
+                elbow_angle = angles.get("elbow", 180)
+                if elbow_angle >= 150:
+                    return RepPhase.READY
+                elif elbow_angle <= 100:
+                    return RepPhase.BOTTOM
+                elif self.current_phase == RepPhase.READY or self.current_phase == RepPhase.DESCENDING:
+                    return RepPhase.DESCENDING
+                else:
+                    return RepPhase.ASCENDING
         
         return self.current_phase
     
@@ -284,24 +374,19 @@ class PoseDetection:
         return completed
     
     def evaluate_squat(self, rep_data: RepData) -> FormEvaluation:
-        """Evaluate squat form using only angles from READY and DESCENDING phases (rest to end of descent)"""
+        """Evaluate squat form"""
         errors = []
         warnings = []
 
-        # EXTREMELY LOOSE criteria for squat
         criteria = {
-            "knee_min": 120,    # Minimum knee bend at bottom (was 70, then 100, now 120)
-            "back_min": 35,     # Back straightness (was 100, then 70, then 40, now 35)
+            "knee_min": 120,
+            "back_min": 35,
         }
 
-        # Only use angles recorded during READY and DESCENDING phases
         def filter_descent_angles(joint: str):
-            # rep_data.phase_angles[joint] is a list of angles in order
-            # rep_data.phase_angles['phase'] is not tracked, so we infer descent as first half of rep
             angles = rep_data.phase_angles.get(joint, [])
             if not angles:
                 return []
-            # Use first half of the angles (from READY to end of DESCENDING)
             n = len(angles)
             return angles[:max(1, n // 2)]
 
@@ -315,26 +400,19 @@ class PoseDetection:
         min_hip = min(descent_hip) if descent_hip else 180
         min_back = min(descent_back) if descent_back else 180
 
-        # Check squat depth (lower angle = deeper squat)
-        # EXTREMELY LOOSE: Only warn if knee angle is above 120 (very shallow)
         if min_knee > criteria["knee_min"]:
             warnings.append(f"Shallow squat: Min knee angle {min_knee:.1f}° (target: <{criteria['knee_min']}°)")
         elif min_knee < 65:
             warnings.append(f"Very deep squat: Min knee angle {min_knee:.1f}°")
 
-        # Check hip hinge and back angle
-        # EVEN LOOSER: Only warn if back angle is below 35
         if min_back < criteria["back_min"]:
             warnings.append(f"Back rounding: Min back angle {min_back:.1f}° (target: >{criteria['back_min']}°)")
 
-        # Check hip position relative to knees
         if min_hip > 95:
             warnings.append(f"Sit back more: Min hip angle {min_hip:.1f}°")
         elif min_hip < 50:
             errors.append(f"Forward lean: Min hip angle {min_hip:.1f}° (target: >{50}°)")
 
-        # Relative depth check using Y coordinates collected during rep
-        # Allow hips to be at knee level or up to 50 pixels higher
         if descent_hip_y and descent_knee_y:
             hip_bottom = max(descent_hip_y)
             knee_bottom = max(descent_knee_y)
@@ -356,13 +434,11 @@ class PoseDetection:
         back_angles = rep_data.phase_angles.get("back_alignment", [])
         arm_body = rep_data.min_angles.get("arm_body_angle", 90)
         
-        # Check elbow bend depth
         if min_elbow > 100:
             errors.append(f"Range issue: Min elbow angle {min_elbow:.1f}° (target: ~90°)")
         elif min_elbow < 60:
             warnings.append(f"Deep press: Min elbow angle {min_elbow:.1f}°")
         
-        # Check back stability
         if back_angles:
             avg_back = np.mean(back_angles)
             if avg_back < 140:
@@ -370,7 +446,6 @@ class PoseDetection:
             elif avg_back > 175:
                 errors.append(f"Back too flat: Avg back angle {avg_back:.1f}° (target: 140-175°)")
         
-        # Check arm angle from body
         if arm_body < 35:
             errors.append(f"Narrow grip: Min arm angle {arm_body:.1f}° (target: 45-75°)")
         elif arm_body > 85:
@@ -382,34 +457,50 @@ class PoseDetection:
         return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback)
     
     def evaluate_pushup(self, rep_data: RepData) -> FormEvaluation:
-        """Evaluate push-up form based on collected rep data"""
+        """Evaluate push-up form using only angles from READY and DESCENDING phases (rest to end of descent)"""
         errors = []
         warnings = []
         
-        criteria = self.FORM_CRITERIA[ExerciseType.PUSHUP]
-        min_elbow = rep_data.min_angles.get("elbow", 180)
-        hip_angles = rep_data.phase_angles.get("hip", [])
-        shoulder_angles = rep_data.phase_angles.get("shoulder", [])
-        
-        # Check elbow bend depth
-        if min_elbow > 100:
-            errors.append(f"Depth issue: Min elbow angle {min_elbow:.1f}° (target: ~90°)")
-        elif min_elbow < 60:
-            warnings.append(f"Deep push-up: Min elbow angle {min_elbow:.1f}°")
+        # EXTREMELY LOOSE criteria for push-up
+        criteria = {
+            "elbow_min": 120,    # Minimum elbow bend (was 70, very loose now)
+            "hip_min": 150,      # Body alignment (hip angle should stay relatively straight)
+        }
+
+        # Only use angles recorded during READY and DESCENDING phases
+        def filter_descent_angles(joint: str):
+            # rep_data.phase_angles[joint] is a list of angles in order
+            # Use first half of the angles (from READY to end of DESCENDING)
+            angles = rep_data.phase_angles.get(joint, [])
+            if not angles:
+                return []
+            # Use first half of the angles (from READY to end of DESCENDING)
+            n = len(angles)
+            return angles[:max(1, n // 2)]
+
+        descent_elbow = filter_descent_angles("elbow")
+        descent_hip = filter_descent_angles("hip")
+        descent_shoulder = filter_descent_angles("shoulder")
+
+        min_elbow = min(descent_elbow) if descent_elbow else 180
+        min_hip = min(descent_hip) if descent_hip else 180
+        avg_shoulder = np.mean(descent_shoulder) if descent_shoulder else 180
+
+        # Check elbow bend depth (VERY LOOSE)
+        # Only warn if elbow angle is above 120 (very shallow)
+        if min_elbow > criteria["elbow_min"]:
+            warnings.append(f"Shallow push-up: Min elbow angle {min_elbow:.1f}° (target: <{criteria['elbow_min']}°)")
+        elif min_elbow < 65:
+            warnings.append(f"Very deep push-up: Min elbow angle {min_elbow:.1f}°")
         
         # Check body alignment (hip angle should stay straight)
-        if hip_angles:
-            avg_hip = np.mean(hip_angles)
-            if avg_hip < 155:
-                errors.append(f"Sagging hips: Avg hip angle {avg_hip:.1f}° (target: >155°)")
-            elif avg_hip > 180:
-                errors.append(f"Hips too high: Avg hip angle {avg_hip:.1f}° (target: 155-180°)")
+        # LOOSE: Only flag if hips sag significantly
+        if min_hip < criteria["hip_min"]:
+            warnings.append(f"Sagging hips: Min hip angle {min_hip:.1f}° (target: >{criteria['hip_min']}°)")
         
-        # Check shoulder stability
-        if shoulder_angles:
-            avg_shoulder = np.mean(shoulder_angles)
-            if avg_shoulder < 145:
-                errors.append(f"Shoulder instability: Avg angle {avg_shoulder:.1f}° (target: >145°)")
+        # Check shoulder stability (LOOSE)
+        if avg_shoulder < 130:
+            warnings.append(f"Shoulder instability: Avg angle {avg_shoulder:.1f}° (target: >130°)")
         
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.PUSHUP, errors, warnings)
@@ -462,17 +553,14 @@ class PoseDetection:
             rx, ry = points["right_shoulder"]
             lx, ly = points["left_shoulder"]
             dx = abs(rx - lx)
-            # approximate torso height for scale (if hip present)
             torso_h = None
             if "right_hip" in points:
                 torso_h = abs(points["right_hip"][1] - ((ry+ly)/2))
             if torso_h is None or torso_h <= 0:
                 torso_h = 200.0
-            # If shoulders are separated too much horizontally, user isn't perfectly sideways
             if dx > max(50, 0.15 * torso_h):
-                # throttle warnings to reduce spam
                 if self.shoulder_warning_cooldown <= 0:
-                    shoulder_warning = "⚠ You appear rotated — ensure you're directly SIDEWAYS to camera (shoulders overlapping)."
+                    shoulder_warning = "⚠ You appear rotated – ensure you're directly SIDEWAYS to camera (shoulders overlapping)."
                     self.shoulder_warning_cooldown = 30
 
         # Smooth back alignment using median of recent frames
@@ -486,52 +574,43 @@ class PoseDetection:
 
         # Anatomical jitter filter: ignore impossible angle jumps
         for k, v in list(angles.items()):
-            # only apply to angle-like keys
             if not isinstance(v, (int, float)):
                 continue
             if k.endswith("_y"):
-                # allow raw coords to vary freely
                 self.last_angles[k] = v
                 continue
             last = self.last_angles.get(k)
             if last is not None:
                 if abs(v - last) > self.angle_jump_threshold:
-                    # treat as jitter: keep last reliable value instead of sudden jump
                     angles[k] = last
                 else:
                     self.last_angles[k] = v
             else:
                 self.last_angles[k] = v
 
-        # Preliminary phase detection from angles
-        prelim_phase = self.detect_phase(angles, exercise)
+        # Detect phase
+        new_phase = self.detect_phase(angles, exercise)
 
         # Handle bottom-hold persistence to avoid bounce counting
-        new_phase = prelim_phase
-        if prelim_phase == RepPhase.BOTTOM:
+        if new_phase == RepPhase.BOTTOM:
             self.bottom_hold_counter += 1
             if self.bottom_hold_counter < self.bottom_hold_required:
-                # still qualifying as descending until held sufficiently
                 new_phase = RepPhase.DESCENDING if self.current_phase in (RepPhase.READY, RepPhase.DESCENDING) else self.current_phase
             else:
                 new_phase = RepPhase.BOTTOM
         else:
             self.bottom_hold_counter = 0
 
-        # Relative depth check for squats: ensure hip drops below knee (image coords increase downward)
-        if exercise == ExerciseType.SQUAT and "hip_y" in angles and "knee_y" in angles:
-            hip_bottom = max(self.last_angles.get("hip_y", angles["hip_y"]), angles["hip_y"])
-            knee_at_bottom = max(self.last_angles.get("knee_y", angles["knee_y"]), angles["knee_y"])
-            # require hip to be meaningfully below knee to count as bottom
-            if new_phase == RepPhase.BOTTOM and hip_bottom <= knee_at_bottom + 5:
-                # Not actually below knee; treat as descending (not true bottom)
-                new_phase = RepPhase.DESCENDING
+        # DEBUG: Phase transition logging
+        if exercise == ExerciseType.PUSHUP:
+            print(f"[PHASE] Last: {self.last_phase.value} -> Current: {self.current_phase.value} -> New: {new_phase.value}")
 
         # Phase transition: start rep when transitioning from READY to DESCENDING
         if self.last_phase == RepPhase.READY and new_phase == RepPhase.DESCENDING:
             self.start_rep(exercise, timestamp)
+            print(f"[REP START] Started rep at timestamp {timestamp}")
 
-        # Record angles during rep (if any)
+        # Record angles during rep
         if self.current_rep:
             self.record_angles(angles)
 
@@ -540,6 +619,7 @@ class PoseDetection:
         if self.last_phase == RepPhase.ASCENDING and new_phase == RepPhase.READY:
             if self.current_rep:
                 rep_data = self.complete_rep(timestamp)
+                print(f"[REP COMPLETE] Rep #{self.rep_count} completed!")
 
                 # Evaluate the completed rep
                 if exercise == ExerciseType.SQUAT:
@@ -557,7 +637,6 @@ class PoseDetection:
         self.last_phase = self.current_phase
         self.current_phase = new_phase
 
-        # Prefer returning shoulder rotation warning if any
         return evaluation, shoulder_warning
     
     def reset(self):
@@ -567,6 +646,8 @@ class PoseDetection:
         self.rep_count = 0
         self.current_rep = None
         self.completed_reps = []
+        self.last_angles = {}
+        self.bottom_hold_counter = 0
 
 
 # Example usage

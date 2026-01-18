@@ -121,7 +121,7 @@ def get_short_error_message(error: str) -> str:
     if "lean" in error or "forward" in error:
         return "Lean back a bit."
     if "depth" in error or "not deep enough" in error or "lower your hips" in error:
-        return "Squat a bit lower."
+        return "Get a bit lower."
     if "back" in error and "round" in error:
         return "Keep your back straighter."
     if "hips" in error and "sag" in error:
