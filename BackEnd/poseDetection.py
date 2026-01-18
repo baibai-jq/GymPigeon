@@ -42,7 +42,6 @@ class FormEvaluation:
     errors: List[str]
     warnings: List[str]
     feedback_message: str
-    main_error: Optional[str] = None  # Primary error for persistent display
 
 class PoseDetection:
     def __init__(self):
@@ -81,29 +80,29 @@ class PoseDetection:
         """Initialize angle criteria for proper form"""
         return {
             ExerciseType.SQUAT: {
-                "knee_min": 60,    # Minimum knee bend at bottom (loosened from 70)
-                "knee_max": 120,   # Maximum knee bend (loosened from 110)
-                "hip_min": 50,     # Minimum hip angle (loosened from 60)
-                "hip_max": 110,    # Maximum hip angle at bottom (loosened from 100)
-                "back_min": 130,   # Back straightness (loosened from 140)
-                "knee_forward_threshold": 25  # Knee shouldn't go too far forward (loosened from 20)
+                "knee_min": 70,    # Minimum knee bend at bottom
+                "knee_max": 110,   # Maximum knee bend (too deep)
+                "hip_min": 60,     # Minimum hip angle (sitting back)
+                "hip_max": 100,    # Maximum hip angle at bottom
+                "back_min": 140,   # Back straightness (shoulder-hip-knee)
+                "knee_forward_threshold": 20  # Knee shouldn't go too far forward
             },
             ExerciseType.BENCH_PRESS: {
-                "elbow_min": 60,   # Minimum elbow bend (loosened from 70)
-                "elbow_max": 120,  # Maximum elbow bend at bottom (loosened from 110)
-                "back_arch_min": 140,  # Slight arch in back (loosened from 150)
-                "back_arch_max": 180,  # (loosened from 175)
-                "arm_angle_min": 40,   # Arm angle from body (loosened from 45)
-                "arm_angle_max": 80,   # (loosened from 75)
-                "bar_path_deviation": 15  # Maximum horizontal deviation (loosened from 10)
+                "elbow_min": 70,   # Minimum elbow bend
+                "elbow_max": 110,  # Maximum elbow bend at bottom
+                "back_arch_min": 150,  # Slight arch in back
+                "back_arch_max": 175,
+                "arm_angle_min": 45,   # Arm angle from body (not too wide)
+                "arm_angle_max": 75,
+                "bar_path_deviation": 10  # Maximum horizontal deviation
             },
             ExerciseType.PUSHUP: {
-                "elbow_min": 60,   # Minimum elbow bend (loosened from 70)
-                "elbow_max": 120,  # Maximum elbow bend at bottom (loosened from 110)
-                "back_min": 150,   # Back should be straight (loosened from 160)
-                "back_max": 180,   # (unchanged)
-                "shoulder_stability_min": 140,  # Shoulders shouldn't sag (loosened from 150)
-                "body_alignment_min": 150  # Overall body alignment (loosened from 160)
+                "elbow_min": 70,   # Minimum elbow bend
+                "elbow_max": 110,  # Maximum elbow bend at bottom
+                "back_min": 160,   # Back should be straight (hip angle)
+                "back_max": 180,
+                "shoulder_stability_min": 150,  # Shoulders shouldn't sag
+                "body_alignment_min": 160  # Overall body alignment
             }
         }
     
@@ -329,10 +328,7 @@ class PoseDetection:
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.SQUAT, errors, warnings)
         
-        # Set main error (first error, or None if correct)
-        main_error = errors[0] if errors else None
-        
-        return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback, main_error)
+        return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback)
     
     def evaluate_bench_press(self, rep_data: RepData) -> FormEvaluation:
         """Evaluate bench press form"""
@@ -370,10 +366,7 @@ class PoseDetection:
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.BENCH_PRESS, errors, warnings)
         
-        # Set main error (first error, or None if correct)
-        main_error = errors[0] if errors else None
-        
-        return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback, main_error)
+        return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback)
     
     def evaluate_pushup(self, rep_data: RepData) -> FormEvaluation:
         """Evaluate push-up form"""
@@ -411,10 +404,7 @@ class PoseDetection:
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.PUSHUP, errors, warnings)
         
-        # Set main error (first error, or None if correct)
-        main_error = errors[0] if errors else None
-        
-        return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback, main_error)
+        return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback)
     
     def _generate_feedback(self, exercise: ExerciseType, errors: List[str], warnings: List[str]) -> str:
         """Generate comprehensive feedback message"""
