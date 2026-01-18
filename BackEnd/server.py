@@ -225,7 +225,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     
     # Initialize Camera and Tracker
-    cap = cv2.VideoCapture(0)
+    cap = cv2.VideoCapture(1)
     tracker = PoseTracker()
     start_time = time.time()
 

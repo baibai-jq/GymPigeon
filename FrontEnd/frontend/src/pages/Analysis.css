@@ -16,7 +16,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1); /* Mirrors the feed */
+  transform: scaleX(1); /* Mirrors the feed */
   z-index: 1;
 }
 

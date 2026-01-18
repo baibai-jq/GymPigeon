@@ -1,71 +1,50 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Pose } from '@mediapipe/pose';
-import type { Results } from '@mediapipe/pose';
-import * as cam from '@mediapipe/camera_utils';
-import { drawConnectors, drawLandmarks } from '@mediapipe/drawing_utils';
-import { POSE_CONNECTIONS } from '@mediapipe/pose';
 import { useNavigate } from 'react-router-dom';
 import './Analysis.css';
 
 function Analysis() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const navigate = useNavigate();
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const socketRef = useRef<WebSocket | null>(null);
+  const navigate = useNavigate();
 
   useEffect(() => {
-    const pose = new Pose({
-      locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`,
-    });
+    // Initialize WebSocket connection
+    socketRef.current = new WebSocket("ws://localhost:8000/ws");
 
-    pose.setOptions({
-      modelComplexity: 1, // Set to 0 for faster performance on mobile
-      minDetectionConfidence: 0.5,
-      minTrackingConfidence: 0.5,
-    });
-
-    pose.onResults((results: any) => {
-      if (!canvasRef.current || !videoRef.current) return;
+    socketRef.current.onmessage = (event) => {
+      // Receive the Base64 string and set it as the image source
+      setImageSrc(`data:image/jpeg;base64,${event.data}`);
       
-      const canvasCtx = canvasRef.current.getContext('2d');
-      if (!canvasCtx) return;
+      // Update status to Ready once the first frame arrives
+      setIsReady(true);
+    };
 
-      // 1. Clear the canvas (makes it transparent)
-      canvasCtx.save();
-      canvasCtx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
-      
-      // 2. Draw the skeleton only if landmarks are found
-      if (results.poseLandmarks) {
-        drawConnectors(canvasCtx, results.poseLandmarks, POSE_CONNECTIONS,
-          { color: '#00FF00', lineWidth: 4 });
-        drawLandmarks(canvasCtx, results.poseLandmarks,
-          { color: '#FF0000', lineWidth: 2 });
+    // Cleanup on component unmount
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.close();
       }
-      canvasCtx.restore();
-      if (!isReady) setIsReady(true);
-    });
-
-    if (videoRef.current) {
-      const camera = new cam.Camera(videoRef.current, {
-        onFrame: async () => {
-          if (videoRef.current) {
-            await pose.send({ image: videoRef.current });
-          }
-        },
-        width: 1280,
-        height: 720,
-      });
-      camera.start();
-    }
+    };
   }, []);
 
   return (
     <div className="analysis-container">
-      {/* The Camera Layer */}
-      <video ref={videoRef} className="video-feed" playsInline />
-      
-      {/* The AI Layer (Stacked on top) */}
-      <canvas ref={canvasRef} className="skeleton-canvas" width="1280" height="720" />
+      {/* Replaced the <video> and <canvas> stack with a single <img> 
+        We use the 'video-feed' class to maintain the same size/layout as the original video.
+      */}
+      {imageSrc ? (
+        <img 
+          src={imageSrc} 
+          alt="Live Stream" 
+          className="video-feed" 
+        />
+      ) : (
+        // Optional: Placeholder while waiting for connection
+        <div className="video-feed" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: 'black', color: 'white' }}>
+          <p>Waiting for server...</p>
+        </div>
+      )}
       
       {/* The UI Layer */}
       <div className="ui-controls">
