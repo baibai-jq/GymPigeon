@@ -180,7 +180,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
     try:
         while True:
-            # Check for incoming messages (exercise changes)
+            # Check for incoming messages (exercise changes) (useless part)
             try:
                 message = await asyncio.wait_for(websocket.receive_text(), timeout=0.001)
                 try:
