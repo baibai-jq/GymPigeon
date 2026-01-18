@@ -13,6 +13,8 @@ import os
 from dotenv import load_dotenv
 from elevenlabs.client import ElevenLabs
 
+import threading 
+import uuid
 from text_to_speech import speak
 
 load_dotenv()
@@ -99,21 +101,37 @@ def draw_skeleton_only(frame, points, evaluation):
             cv2.line(frame, points[point_a], points[point_b], base_color, 4)
 
 def evenlab_tts_short_message(message: str):
+    def _audio_task():
+        try:
+            # 1. Generate Audio (Network call)
+            audio_generator = client.text_to_speech.convert(
+                text=message,
+                voice_id="JBFqnCBsd6RMkjVDRZzb",
+                model_id="eleven_multilingual_v2",
+                output_format="mp3_44100_128",
+            )
+            
+            # 2. Save to unique file (prevents overwriting issues)
+            audio_bytes = b"".join(audio_generator)
+            filename = f"temp_err_{uuid.uuid4().hex}.mp3"
+            
+            with open(filename, "wb") as f:
+                f.write(audio_bytes)
+            
+            # 3. Play Audio (System call)
+            os.system(f"afplay {filename}")
+            
+            # 4. Cleanup
+            if os.path.exists(filename):
+                os.remove(filename)
+                
+        except Exception as e:
+            print(f"Evenlab TTS error: {e}")
 
-    audio_generator = client.text_to_speech.convert(
-        text=message,
-        voice_id="JBFqnCBsd6RMkjVDRZzb",
-        model_id="eleven_multilingual_v2",
-        output_format="mp3_44100_128",
-    )
-    try:
-        audio_bytes = b"".join(audio_generator)
-        filename = "temo_output.mp3"
-        with open(filename, "wb") as f:
-            f.write(audio_bytes)
-        os.system(f"afplay {filename}")
-    except Exception as e:
-        print(f"Evenlab TTS error: {e}")
+    # Start the task in a separate thread
+    thread = threading.Thread(target=_audio_task)
+    thread.daemon = True  # Ensures thread dies if main program quits
+    thread.start()
 
 def get_short_error_message(error: str) -> str:
     """Map detailed error to a short, actionable phrase"""
