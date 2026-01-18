@@ -284,26 +284,49 @@ class PoseDetection:
         return completed
     
     def evaluate_squat(self, rep_data: RepData) -> FormEvaluation:
-        """Evaluate squat form based on collected rep data"""
+        """Evaluate squat form using only angles from READY and DESCENDING phases (rest to end of descent)"""
         errors = []
         warnings = []
-        
-        criteria = self.FORM_CRITERIA[ExerciseType.SQUAT]
-        min_knee = rep_data.min_angles.get("knee", 180)
-        min_hip = rep_data.min_angles.get("hip", 180)
-        back_list = rep_data.phase_angles.get("back_alignment_smoothed", []) or rep_data.phase_angles.get("back_alignment", [])
-        min_back = min(back_list) if back_list else rep_data.min_angles.get("back_alignment", 180)
-        
+
+        # EXTREMELY LOOSE criteria for squat
+        criteria = {
+            "knee_min": 120,    # Minimum knee bend at bottom (was 70, then 100, now 120)
+            "back_min": 35,     # Back straightness (was 100, then 70, then 40, now 35)
+        }
+
+        # Only use angles recorded during READY and DESCENDING phases
+        def filter_descent_angles(joint: str):
+            # rep_data.phase_angles[joint] is a list of angles in order
+            # rep_data.phase_angles['phase'] is not tracked, so we infer descent as first half of rep
+            angles = rep_data.phase_angles.get(joint, [])
+            if not angles:
+                return []
+            # Use first half of the angles (from READY to end of DESCENDING)
+            n = len(angles)
+            return angles[:max(1, n // 2)]
+
+        descent_knee = filter_descent_angles("knee")
+        descent_hip = filter_descent_angles("hip")
+        descent_back = filter_descent_angles("back_alignment_smoothed") or filter_descent_angles("back_alignment")
+        descent_hip_y = filter_descent_angles("hip_y")
+        descent_knee_y = filter_descent_angles("knee_y")
+
+        min_knee = min(descent_knee) if descent_knee else 180
+        min_hip = min(descent_hip) if descent_hip else 180
+        min_back = min(descent_back) if descent_back else 180
+
         # Check squat depth (lower angle = deeper squat)
-        if min_knee > 100:
-            errors.append(f"Depth issue: Min knee angle {min_knee:.1f}° (target: <90°)")
+        # EXTREMELY LOOSE: Only warn if knee angle is above 120 (very shallow)
+        if min_knee > criteria["knee_min"]:
+            warnings.append(f"Shallow squat: Min knee angle {min_knee:.1f}° (target: <{criteria['knee_min']}°)")
         elif min_knee < 65:
             warnings.append(f"Very deep squat: Min knee angle {min_knee:.1f}°")
-        
+
         # Check hip hinge and back angle
+        # EVEN LOOSER: Only warn if back angle is below 35
         if min_back < criteria["back_min"]:
-            errors.append(f"Back rounding: Min back angle {min_back:.1f}° (target: >{criteria['back_min']}°)")
-        
+            warnings.append(f"Back rounding: Min back angle {min_back:.1f}° (target: >{criteria['back_min']}°)")
+
         # Check hip position relative to knees
         if min_hip > 95:
             warnings.append(f"Sit back more: Min hip angle {min_hip:.1f}°")
@@ -311,17 +334,16 @@ class PoseDetection:
             errors.append(f"Forward lean: Min hip angle {min_hip:.1f}° (target: >{50}°)")
 
         # Relative depth check using Y coordinates collected during rep
-        hip_ys = rep_data.phase_angles.get("hip_y", [])
-        knee_ys = rep_data.phase_angles.get("knee_y", [])
-        if hip_ys and knee_ys:
-            hip_bottom = max(hip_ys)
-            knee_bottom = max(knee_ys)
-            if hip_bottom < knee_bottom - 10:
-                errors.append("Insufficient depth: Hips below knee required")
-        
+        # Allow hips to be at knee level or up to 50 pixels higher
+        if descent_hip_y and descent_knee_y:
+            hip_bottom = max(descent_hip_y)
+            knee_bottom = max(descent_knee_y)
+            if hip_bottom < knee_bottom - 50:
+                errors.append("Insufficient depth: Hips should be at knee level or up to 50 pixels higher")
+
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.SQUAT, errors, warnings)
-        
+
         return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback)
     
     def evaluate_bench_press(self, rep_data: RepData) -> FormEvaluation:
