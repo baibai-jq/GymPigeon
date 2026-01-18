@@ -221,14 +221,14 @@ class PoseDetection:
         return angles
     
     def detect_phase(self, angles: Dict[str, float], exercise: ExerciseType) -> RepPhase:
-        """Detect current phase of the exercise"""
+        """Detect current phase of the exercise based on joint angles"""
         if exercise == ExerciseType.SQUAT:
             knee_angle = angles.get("knee", 180)
             if knee_angle >= 140:
                 return RepPhase.READY
             elif knee_angle <= 120:
                 return RepPhase.BOTTOM
-            elif self.current_phase == RepPhase.READY:
+            elif self.current_phase in [RepPhase.READY, RepPhase.DESCENDING]:
                 return RepPhase.DESCENDING
             else:
                 return RepPhase.ASCENDING
@@ -239,7 +239,7 @@ class PoseDetection:
                 return RepPhase.READY
             elif elbow_angle <= 120:
                 return RepPhase.BOTTOM
-            elif self.current_phase == RepPhase.READY:
+            elif self.current_phase in [RepPhase.READY, RepPhase.DESCENDING]:
                 return RepPhase.DESCENDING
             else:
                 return RepPhase.ASCENDING
@@ -435,6 +435,10 @@ class PoseDetection:
         - evaluation_result: FormEvaluation if rep completed, None otherwise
         - warning_message: Warning if landmarks missing, None otherwise
         """
+        # Auto-reset if exercise has changed
+        if self.current_exercise != exercise:
+            self.reset()
+        
         self.current_exercise = exercise
         
         # Check required landmarks
@@ -557,6 +561,10 @@ class PoseDetection:
         self.rep_count = 0
         self.current_rep = None
         self.completed_reps = []
+        self.back_window.clear()
+        self.last_angles.clear()
+        self.bottom_hold_counter = 0
+        self.shoulder_warning_cooldown = 0
 
 
 # Example usage

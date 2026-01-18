@@ -20,8 +20,8 @@ function Home() {
 
   const exercises = [
     { id: 'squat', name: 'Barbell Squat', image: BarbellSquat },
-    { id: 'deadlift', name: 'Deadlift', image: BarbellSquat },
-    { id: 'bench', name: 'Bench Press', image: BarbellSquat }
+    { id: 'bench', name: 'Bench Press', image: BarbellSquat },
+    { id: 'pushup', name: 'Push-ups', image: BarbellSquat }
   ];
 
   const handleExerciseSelect = (id: string) => {
