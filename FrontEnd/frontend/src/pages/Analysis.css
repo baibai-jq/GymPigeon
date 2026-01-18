@@ -1,23 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
 /* Container fills the whole screen */
 .analysis-container {
   position: relative;
   width: 100vw;
   height: 100vh;
-  background-color: #000;
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a3f 100%);
   overflow: hidden;
   display: flex;
   justify-content: center;
   align-items: center;
+  font-family: 'Poppins', sans-serif;
 }
 
-/* Video sits at the bottom */
+/* Video container for overlay positioning */
+.video-container {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Video feed with enhanced styling */
 .video-feed {
   position: absolute;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(1); /* Mirrors the feed */
+  transform: scaleX(1);
   z-index: 1;
+  filter: brightness(1.05) contrast(1.1);
 }
 
 /* Canvas sits exactly on top of the video */
@@ -26,39 +44,382 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1); /* Mirrors the skeleton to match video */
+  transform: scaleX(-1);
   z-index: 2;
-  pointer-events: none; /* Allows you to click "through" the lines */
+  pointer-events: none;
 }
 
-/* UI Elements sit at the very top */
+/* UI Elements - Header Controls */
 .ui-controls {
   position: absolute;
-  top: 40px;
+  top: 0;
   left: 0;
+  right: 0;
   width: 100%;
   display: flex;
-  justify-content: right;
-  padding: 0 20px;
-  z-index: 10;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 32px;
+  z-index: 100;
   box-sizing: border-box;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.6) 0%, rgba(0, 0, 0, 0) 100%);
+  backdrop-filter: blur(10px);
 }
 
+/* Title/Header */
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  color: white;
+}
+
+.session-header h2 {
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.5px;
+}
+
+.session-header p {
+  font-size: 14px;
+  color: #a0aec0;
+  font-weight: 400;
+}
+
+/* Status Badge */
 .status-badge {
-  background: rgba(0, 0, 0, 0.6);
-  color: #00FF00;
-  padding: 8px 16px;
-  border-radius: 20px;
-  font-weight: bold;
-  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 212, 255, 0.15);
+  border: 1px solid rgba(0, 212, 255, 0.4);
+  color: #00d4ff;
+  padding: 10px 18px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 13px;
+  backdrop-filter: blur(10px);
+  letter-spacing: 0.3px;
 }
 
+.status-badge::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  background: #00d4ff;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* End Session Button */
 .exit-btn {
-  background: #ff453a;
+  background: linear-gradient(135deg, #ff453a 0%, #ff2d20 100%);
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: 12px;
-  font-weight: bold;
+  padding: 12px 28px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 14px;
+  font-family: 'Poppins', sans-serif;
   cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(255, 69, 58, 0.3);
+  letter-spacing: 0.3px;
+}
+
+.exit-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(255, 69, 58, 0.4);
+}
+
+.exit-btn:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 10px rgba(255, 69, 58, 0.3);
+}
+
+/* Waiting for connection overlay */
+.waiting-overlay {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 24px;
+  background: linear-gradient(135deg, #0f0f23 0%, #1a1a3f 100%);
+}
+
+.waiting-overlay p {
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 500;
+}
+
+.loading-spinner {
+  width: 50px;
+  height: 50px;
+  border: 3px solid rgba(0, 212, 255, 0.2);
+  border-top: 3px solid #00d4ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================
+   FEEDBACK OVERLAY STYLES
+   ============================================================ */
+
+.feedback-overlay {
+  position: absolute;
+  bottom: 32px;
+  left: 32px;
+  right: 32px;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 60vh;
+  pointer-events: none;
+}
+
+/* Stats Panel - Current Form State */
+.stats-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  padding: 16px;
+  border-radius: 12px;
+  max-width: 400px;
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: center;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #a0aec0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: #00d4ff;
+}
+
+.stat-value.good {
+  color: #00ff00;
+}
+
+.stat-value.check {
+  color: #ff453a;
+}
+
+/* Warning Banner */
+.warning-banner {
+  background: rgba(255, 165, 0, 0.75);
+  border: 1px solid rgba(255, 165, 0, 0.9);
+  color: #ffffff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 400px;
+}
+
+/* Errors Panel */
+.errors-panel {
+  background: rgba(255, 69, 58, 0.7);
+  border: 1px solid rgba(255, 69, 58, 0.9);
+  color: #ffffff;
+  padding: 12px 16px;
+  border-radius: 8px;
+  backdrop-filter: blur(10px);
+  max-width: 400px;
+}
+
+.errors-panel h4 {
+  font-size: 13px;
+  color: #ff453a;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.errors-panel ul {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.errors-panel li {
+  font-size: 13px;
+  color: #e0e0e0;
+  padding-left: 16px;
+  position: relative;
+}
+
+.errors-panel li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: #ff453a;
+  font-weight: 700;
+}
+
+/* ============================================================
+   EVALUATION PANEL STYLES
+   ============================================================ */
+
+.evaluation-panel {
+  position: fixed;
+  bottom: 32px;
+  right: 32px;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(10px);
+  border: 2px solid;
+  padding: 20px;
+  border-radius: 12px;
+  max-width: 320px;
+  z-index: 25;
+  animation: slideIn 0.3s ease-out;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.evaluation-panel.good {
+  border-color: rgba(0, 255, 0, 0.5);
+  background: rgba(0, 255, 0, 0.08);
+}
+
+.evaluation-panel.bad {
+  border-color: rgba(255, 69, 58, 0.5);
+  background: rgba(255, 69, 58, 0.08);
+}
+
+.evaluation-panel h3 {
+  font-size: 16px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.3px;
+}
+
+.evaluation-panel.good h3 {
+  color: #00ff00;
+}
+
+.evaluation-panel.bad h3 {
+  color: #ff453a;
+}
+
+.feedback-text {
+  font-size: 13px;
+  color: #e0e0e0;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
+
+.errors-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.error-item {
+  font-size: 12px;
+  color: #c0c0c0;
+  padding: 4px 0;
+  border-left: 2px solid #ff453a;
+  padding-left: 8px;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .feedback-overlay {
+    bottom: 16px;
+    left: 16px;
+    right: 16px;
+  }
+
+  .stats-panel {
+    max-width: 100%;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .ui-controls {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .session-header {
+    width: 100%;
+  }
+
+  .exit-btn {
+    width: 100%;
+  }
+
+  .evaluation-panel {
+    bottom: 16px;
+    right: 16px;
+    max-width: 280px;
+  }
+}
+
+@media (max-width: 480px) {
+  .session-header h2 {
+    font-size: 18px;
+  }
+
+  .stat-value {
+    font-size: 16px;
+  }
+
+  .errors-panel h4,
+  .evaluation-panel h3 {
+    font-size: 12px;
+  }
 }

@@ -284,46 +284,40 @@ class PoseDetection:
         return completed
     
     def evaluate_squat(self, rep_data: RepData) -> FormEvaluation:
-        """Evaluate squat form"""
+        """Evaluate squat form based on collected rep data"""
         errors = []
         warnings = []
         
         criteria = self.FORM_CRITERIA[ExerciseType.SQUAT]
         min_knee = rep_data.min_angles.get("knee", 180)
         min_hip = rep_data.min_angles.get("hip", 180)
-        # Use smoothed back alignment if available to reduce jitter
         back_list = rep_data.phase_angles.get("back_alignment_smoothed", []) or rep_data.phase_angles.get("back_alignment", [])
-        min_shoulder = min(back_list) if back_list else rep_data.min_angles.get("shoulder", 180)
+        min_back = min(back_list) if back_list else rep_data.min_angles.get("back_alignment", 180)
         
-        # Check squat depth
-        if min_knee > criteria["knee_max"]:
-            errors.append(f"Not deep enough: Squat to at least {criteria['knee_max']}°") # knee angle (achieved {min_knee:.0f}°)
-        elif min_knee < criteria["knee_min"]:
-            warnings.append(f"Squat is too deep") # Very deep squat: {min_knee:.0f}° (standard range: {criteria['knee_min']}-{criteria['knee_max']}°)
+        # Check squat depth (lower angle = deeper squat)
+        if min_knee > 100:
+            errors.append(f"Depth issue: Min knee angle {min_knee:.1f}° (target: <90°)")
+        elif min_knee < 65:
+            warnings.append(f"Very deep squat: Min knee angle {min_knee:.1f}°")
         
-        # Check hip hinge
-        if min_hip > criteria["hip_max"]:
-            errors.append(f"Not sitting back enough: Stick your butt out more") # Hip angle {min_hip:.0f}° (target: {criteria['hip_min']}-{criteria['hip_max']}°)
-        elif min_hip < criteria["hip_min"]:
-            errors.append(f"Leaning too far forward: Hip angle {min_hip:.0f}°")
+        # Check hip hinge and back angle
+        if min_back < criteria["back_min"]:
+            errors.append(f"Back rounding: Min back angle {min_back:.1f}° (target: >{criteria['back_min']}°)")
         
-        # Check back straightness
-        if min_shoulder < criteria["back_min"]:
-            errors.append(f"Back rounding detected: Keep chest up ") # and maintain {criteria['back_min']}°+ back angle (detected {min_shoulder:.0f}°)
-        
-        # Check knee-hip relationship
-        if min_hip > min_knee + criteria["knee_forward_threshold"]:
-            errors.append("Hips too high: Squat deeper and sit back more")
+        # Check hip position relative to knees
+        if min_hip > 95:
+            warnings.append(f"Sit back more: Min hip angle {min_hip:.1f}°")
+        elif min_hip < 50:
+            errors.append(f"Forward lean: Min hip angle {min_hip:.1f}° (target: >{50}°)")
 
         # Relative depth check using Y coordinates collected during rep
         hip_ys = rep_data.phase_angles.get("hip_y", [])
         knee_ys = rep_data.phase_angles.get("knee_y", [])
         if hip_ys and knee_ys:
-            # bottom positions should show hip lower (greater Y) than knee
             hip_bottom = max(hip_ys)
             knee_bottom = max(knee_ys)
-            if hip_bottom <= knee_bottom + 5:  # allow small pixel tolerance
-                errors.append("Insufficient depth: Hips did not drop below knees. Drive hips downward until crease is below the knee.")
+            if hip_bottom < knee_bottom - 10:
+                errors.append("Insufficient depth: Hips below knee required")
         
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.SQUAT, errors, warnings)
@@ -331,7 +325,7 @@ class PoseDetection:
         return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback)
     
     def evaluate_bench_press(self, rep_data: RepData) -> FormEvaluation:
-        """Evaluate bench press form"""
+        """Evaluate bench press form based on collected rep data"""
         errors = []
         warnings = []
         
@@ -341,27 +335,24 @@ class PoseDetection:
         arm_body = rep_data.min_angles.get("arm_body_angle", 90)
         
         # Check elbow bend depth
-        if min_elbow > criteria["elbow_max"]:
-            errors.append(f"Not lowering bar enough: Lower to chest level") # ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)
-        elif min_elbow < criteria["elbow_min"]:
-            warnings.append(f"Very deep press: {min_elbow:.0f}° elbow angle")
+        if min_elbow > 100:
+            errors.append(f"Range issue: Min elbow angle {min_elbow:.1f}° (target: ~90°)")
+        elif min_elbow < 60:
+            warnings.append(f"Deep press: Min elbow angle {min_elbow:.1f}°")
         
-        # Check back arch
+        # Check back stability
         if back_angles:
             avg_back = np.mean(back_angles)
-            if avg_back < criteria["back_arch_min"] or avg_back > criteria["back_arch_max"]:
-                errors.append(f"Back position: Maintain slight arch") # ({criteria['back_arch_min']}-{criteria['back_arch_max']}°, detected {avg_back:.0f}°)
+            if avg_back < 140:
+                errors.append(f"Excessive arch: Avg back angle {avg_back:.1f}° (target: 140-175°)")
+            elif avg_back > 175:
+                errors.append(f"Back too flat: Avg back angle {avg_back:.1f}° (target: 140-175°)")
         
-        # Check arm angle from body (not too wide)
-        if arm_body < criteria["arm_angle_min"]:
-            errors.append(f"Arms too close to body: Widen your grip") # (arm angle {arm_body:.0f}°)
-        elif arm_body > criteria["arm_angle_max"]:
-            errors.append(f"Arms too wide: Narrow your grip to ~45-75° from body (detected {arm_body:.0f}°)")
-        
-        # Check bar path (wrist should move vertically)
-        if "wrist" in rep_data.phase_angles:
-            # This would require tracking horizontal movement - simplified for now
-            warnings.append("Ensure bar path is straight up and down")
+        # Check arm angle from body
+        if arm_body < 35:
+            errors.append(f"Narrow grip: Min arm angle {arm_body:.1f}° (target: 45-75°)")
+        elif arm_body > 85:
+            warnings.append(f"Wide grip: Min arm angle {arm_body:.1f}°")
         
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.BENCH_PRESS, errors, warnings)
@@ -369,37 +360,34 @@ class PoseDetection:
         return FormEvaluation(is_correct, self.rep_count, errors, warnings, feedback)
     
     def evaluate_pushup(self, rep_data: RepData) -> FormEvaluation:
-        """Evaluate push-up form"""
+        """Evaluate push-up form based on collected rep data"""
         errors = []
         warnings = []
         
         criteria = self.FORM_CRITERIA[ExerciseType.PUSHUP]
         min_elbow = rep_data.min_angles.get("elbow", 180)
-        back_angles = rep_data.phase_angles.get("hip", [])
+        hip_angles = rep_data.phase_angles.get("hip", [])
         shoulder_angles = rep_data.phase_angles.get("shoulder", [])
         
         # Check elbow bend depth
-        if min_elbow > criteria["elbow_max"]:
-            errors.append(f"Not going down enough: Lower chest to ground") # ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)
-        elif min_elbow < criteria["elbow_min"]:
-            warnings.append(f"Very deep push-up: {min_elbow:.0f}° elbow angle")
+        if min_elbow > 100:
+            errors.append(f"Depth issue: Min elbow angle {min_elbow:.1f}° (target: ~90°)")
+        elif min_elbow < 60:
+            warnings.append(f"Deep push-up: Min elbow angle {min_elbow:.1f}°")
         
-        # Check back/body alignment (hip angle should stay relatively straight)
-        if back_angles:
-            avg_back = np.mean(back_angles)
-            if avg_back < criteria["back_min"]:
-                errors.append(f"Hips sagging: Keep core tight and body straight ") # (hip angle {avg_back:.0f}°, target {criteria['back_min']}°+)
-            elif avg_back > criteria["back_max"]:
-                errors.append(f"Hips too high: Lower hips to form straight line from head to heels")
+        # Check body alignment (hip angle should stay straight)
+        if hip_angles:
+            avg_hip = np.mean(hip_angles)
+            if avg_hip < 155:
+                errors.append(f"Sagging hips: Avg hip angle {avg_hip:.1f}° (target: >155°)")
+            elif avg_hip > 180:
+                errors.append(f"Hips too high: Avg hip angle {avg_hip:.1f}° (target: 155-180°)")
         
         # Check shoulder stability
         if shoulder_angles:
             avg_shoulder = np.mean(shoulder_angles)
-            if avg_shoulder < criteria["shoulder_stability_min"]:
-                errors.append(f"Shoulders unstable: Keep shoulder blades retracted") # (detected {avg_shoulder:.0f}°)
-        
-        # Check arm placement (should be roughly shoulder-width)
-        warnings.append("Ensure hands are shoulder-width apart")
+            if avg_shoulder < 145:
+                errors.append(f"Shoulder instability: Avg angle {avg_shoulder:.1f}° (target: >145°)")
         
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.PUSHUP, errors, warnings)
