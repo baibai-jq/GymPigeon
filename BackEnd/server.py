@@ -35,7 +35,7 @@ def extract_points_from_result(result, tracker, h, w):
     
     return points
 
-def draw_skeleton_with_feedback(frame, points, warning_message, evaluation, exercise_type, rep_count, current_phase):
+def draw_skeleton_with_feedback(frame, points, warning_message, evaluation, exercise_type, rep_count, current_phase, persistent_error=None):
     """Draw skeleton with visual feedback"""
     h, w, _ = frame.shape
     
@@ -150,6 +150,22 @@ def draw_skeleton_with_feedback(frame, points, warning_message, evaluation, exer
                 cv2.putText(frame, f"- {error}", (10, y_offset), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 0, 255), 1)
                 y_offset += 22
+    
+    # Show persistent error from last rep (stays until next rep completes)
+    elif persistent_error:
+        error_color = (0, 0, 255)  # Red
+        cv2.putText(frame, "LAST REP:", (10, y_offset), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        y_offset += 25
+        
+        # Wrap and display persistent error
+        if len(persistent_error) > 60:
+            error_text = persistent_error[:57] + "..."
+        else:
+            error_text = persistent_error
+        
+        cv2.putText(frame, f"- {error_text}", (10, y_offset), 
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, error_color, 1)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -164,6 +180,7 @@ async def websocket_endpoint(websocket: WebSocket):
     # Default exercise - can be changed via WebSocket message
     current_exercise = ExerciseType.SQUAT
     last_evaluation = None
+    rep_summaries = []  # Track all reps for session summary
 
     if not cap.isOpened():
         print("Error: Could not open webcam.")
@@ -228,6 +245,15 @@ async def websocket_endpoint(websocket: WebSocket):
                 # If rep completed, update last evaluation
                 if evaluation:
                     last_evaluation = evaluation
+                    
+                    # Collect rep summary for session end
+                    rep_summary = {
+                        "rep_number": evaluation.rep_number,
+                        "is_correct": evaluation.is_correct,
+                        "main_error": evaluation.main_error
+                    }
+                    rep_summaries.append(rep_summary)
+                    
                     print(f"\n{'='*60}")
                     print(f"Rep {evaluation.rep_number} completed!")
                     print(f"Correct form: {evaluation.is_correct}")
@@ -254,19 +280,17 @@ async def websocket_endpoint(websocket: WebSocket):
                         "is_correct": evaluation.is_correct,
                         "errors": evaluation.errors,
                         "warnings": evaluation.warnings,
-                        "feedback": evaluation.feedback_message
+                        "feedback": evaluation.feedback_message,
+                        "main_error": evaluation.main_error
                     }
                     # Send evaluation as JSON with a prefix to distinguish it
-                    #
-                    #cv2.putText(frame, f"rep_number: {eval_data['rep_number']} \n is_correct: {eval_data['is_correct']} \n \
-                    #            errors: {eval_data['errors']} \n warnings: {eval_data['warnings']}", 
-                    #    (100, controls_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
                     await websocket.send_text("EVAL:" + json.dumps(eval_data))
                 
                 # Draw skeleton with feedback
+                persistent_error = last_evaluation.main_error if (last_evaluation and not evaluation) else None
                 draw_skeleton_with_feedback(
-                    frame, points, warning_message, last_evaluation,
-                    current_exercise, detector.rep_count, detector.current_phase
+                    frame, points, warning_message, evaluation or last_evaluation if not evaluation else None,
+                    current_exercise, detector.rep_count, detector.current_phase, persistent_error
                 )
                 
             else:
@@ -295,10 +319,32 @@ async def websocket_endpoint(websocket: WebSocket):
 
     except WebSocketDisconnect:
         print("\nClient disconnected")
+        # Send session summary before closing
+        try:
+            summary_data = {
+                "type": "session_summary",
+                "total_reps": detector.rep_count,
+                "exercise": current_exercise.value,
+                "reps": rep_summaries
+            }
+            await websocket.send_text("SUMMARY:" + json.dumps(summary_data))
+        except:
+            pass
     except Exception as e:
         print(f"\nError: {e}")
         import traceback
         traceback.print_exc()
+        # Try to send summary even on error
+        try:
+            summary_data = {
+                "type": "session_summary",
+                "total_reps": detector.rep_count,
+                "exercise": current_exercise.value,
+                "reps": rep_summaries
+            }
+            await websocket.send_text("SUMMARY:" + json.dumps(summary_data))
+        except:
+            pass
     finally:
         cap.release()
         print(f"\nSession complete! Total reps: {detector.rep_count}")
