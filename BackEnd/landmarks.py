@@ -4,9 +4,8 @@ from mediapipe.tasks.python import vision
 from mediapipe.tasks.python import BaseOptions
 import numpy as np
 
-# ----------------------------
+
 # DATA STRUCTURES
-# ----------------------------
 @dataclass
 class Point:
     x: float
@@ -24,9 +23,7 @@ class KeyLandmarks:
     ankle: Point
 
 
-# ----------------------------
 # POSE TRACKER CLASS
-# ----------------------------
 class PoseTracker:
     def __init__(self):
         # Always load model relative to this file
