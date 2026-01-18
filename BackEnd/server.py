@@ -184,6 +184,7 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 message = await asyncio.wait_for(websocket.receive_text(), timeout=0.001)
                 try:
+                    print('tried success')
                     data = json.loads(message)
                     if "exercise" in data:
                         exercise_map = {
@@ -242,7 +243,7 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Option B: Speak only the PRIMARY error
                         if evaluation.errors:
                             # Reads: "Correction needed. Not deep enough."
-                            speak(f"Correction. {evaluation.errors[0]}")
+                            speak(f"{evaluation.errors[0]}")
                         else:
                             speak("Check your form.")
                     
