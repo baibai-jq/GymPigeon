@@ -8,8 +8,15 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from landmarks import PoseTracker
 from poseDetection import PoseDetection, ExerciseType, FormEvaluation
 import numpy as np
+import requests
+import os
+from dotenv import load_dotenv
+from elevenlabs.client import ElevenLabs
 
 from text_to_speech import speak
+
+load_dotenv()
+EVENLAB_API_KEY = os.getenv("EVENLAB_API_KEY")
 
 app = FastAPI()
 
@@ -90,6 +97,44 @@ def draw_skeleton_only(frame, points, evaluation):
     for point_a, point_b in connections:
         if point_a in points and point_b in points:
             cv2.line(frame, points[point_a], points[point_b], base_color, 4)
+
+def evenlab_tts_short_message(message: str):
+
+    audio_generator = client.text_to_speech.convert(
+        text=message,
+        voice_id="JBFqnCBsd6RMkjVDRZzb",
+        model_id="eleven_multilingual_v2",
+        output_format="mp3_44100_128",
+    )
+    try:
+        audio_bytes = b"".join(audio_generator)
+        filename = "temo_output.mp3"
+        with open(filename, "wb") as f:
+            f.write(audio_bytes)
+        os.system(f"afplay {filename}")
+    except Exception as e:
+        print(f"Evenlab TTS error: {e}")
+
+def get_short_error_message(error: str) -> str:
+    """Map detailed error to a short, actionable phrase"""
+    error = error.lower()
+    if "lean" in error or "forward" in error:
+        return "Lean back a bit."
+    if "depth" in error or "not deep enough" in error or "lower your hips" in error:
+        return "Squat a bit lower."
+    if "back" in error and "round" in error:
+        return "Keep your back straighter."
+    if "hips" in error and "sag" in error:
+        return "Keep your hips up."
+    if "arms" in error and "close" in error:
+        return "Widen your grip."
+    if "arch" in error:
+        return "Reduce your back arch."
+    # Default fallback
+    return "Check your form."
+
+
+client = ElevenLabs(api_key=EVENLAB_API_KEY)
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -179,12 +224,12 @@ async def websocket_endpoint(websocket: WebSocket):
                         # Option A: Simple praise
                         speak(f"Good rep!")
                     else:
-                        # Option B: Speak only the PRIMARY error
+                        # Option B: Use Evenlab TTS for concise error
                         if evaluation.errors:
-                            # Reads: "Correction needed. Not deep enough."
-                            speak(f"Correction. {evaluation.errors[0]}")
+                            short_msg = get_short_error_message(evaluation.errors[0])
+                            evenlab_tts_short_message(short_msg)
                         else:
-                            speak("Check your form.")
+                            evenlab_tts_short_message("Check your form.")
                     
 
                     # Send evaluation to client (as separate message)

@@ -29,7 +29,7 @@ try:
     print(f"   Success! Received {len(audio_bytes)} bytes.")
 
     # 3. Save to file (This proves the data is real)
-    filename = "test_output.mp3"
+    filename = "temo_output.mp3"
     with open(filename, "wb") as f:
         f.write(audio_bytes)
     print(f"3. Saved to {filename}")

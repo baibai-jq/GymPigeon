@@ -82,10 +82,10 @@ class PoseDetection:
             ExerciseType.SQUAT: {
                 "knee_min": 70,    # Minimum knee bend at bottom
                 "knee_max": 110,   # Maximum knee bend (too deep)
-                "hip_min": 60,     # Minimum hip angle (sitting back)
-                "hip_max": 100,    # Maximum hip angle at bottom
-                "back_min": 140,   # Back straightness (shoulder-hip-knee)
-                "knee_forward_threshold": 20  # Knee shouldn't go too far forward
+                "hip_min": 30,     # Very loose: Minimum hip angle (sitting back)
+                "hip_max": 120,    # Very loose: Maximum hip angle at bottom
+                "back_min": 100,   # Very loose: Back straightness (shoulder-hip-knee)
+                "knee_forward_threshold": 30  # Very loose: Knee shouldn't go too far forward
             },
             ExerciseType.BENCH_PRESS: {
                 "elbow_min": 70,   # Minimum elbow bend
@@ -101,7 +101,7 @@ class PoseDetection:
                 "elbow_max": 110,  # Maximum elbow bend at bottom
                 "back_min": 160,   # Back should be straight (hip angle)
                 "back_max": 180,
-                "shoulder_stability_min": 150,  # Shoulders shouldn't sag
+                "shoulder_stability_min": 135,  # Looser: Shoulders shouldn't sag
                 "body_alignment_min": 160  # Overall body alignment
             }
         }

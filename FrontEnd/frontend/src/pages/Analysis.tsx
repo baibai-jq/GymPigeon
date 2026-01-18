@@ -57,11 +57,10 @@ function Analysis() {
           console.log('Evaluation received:', evalData);
           setLastEvaluation(evalData);
           
-          // Clear feedback and evaluation panel after 4 seconds
+          // Clear evaluation panel after 4 seconds (feedback overlay persists)
           setTimeout(() => {
             setLastEvaluation(null);
-            setFeedback(null);
-          }, 4000);
+          }, 400000);
         } catch (e) {
           console.error('Error parsing evaluation:', e);
         }
@@ -162,16 +161,18 @@ function Analysis() {
             )}
 
             {/* Form Errors */}
-            {feedback.errors.length > 0 && (
-              <div className="errors-panel">
-                <h4>Form Issues:</h4>
+            <div className="errors-panel">
+              <h4>Form Issues:</h4>
+              {feedback.errors.length > 0 ? (
                 <ul>
                   {feedback.errors.map((error, idx) => (
                     <li key={idx}>{error}</li>
                   ))}
                 </ul>
-              </div>
-            )}
+              ) : (
+                <span style={{ color: '#b0ffb0', fontWeight: 500 }}>No form issues detected!</span>
+              )}
+            </div>
           </div>
         )}
 
