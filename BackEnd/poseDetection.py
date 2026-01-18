@@ -221,14 +221,14 @@ class PoseDetection:
         return angles
     
     def detect_phase(self, angles: Dict[str, float], exercise: ExerciseType) -> RepPhase:
-        """Detect current phase of the exercise"""
+        """Detect current phase of the exercise based on joint angles"""
         if exercise == ExerciseType.SQUAT:
             knee_angle = angles.get("knee", 180)
             if knee_angle >= 140:
                 return RepPhase.READY
             elif knee_angle <= 120:
                 return RepPhase.BOTTOM
-            elif self.current_phase == RepPhase.READY:
+            elif self.current_phase in [RepPhase.READY, RepPhase.DESCENDING]:
                 return RepPhase.DESCENDING
             else:
                 return RepPhase.ASCENDING
@@ -239,7 +239,7 @@ class PoseDetection:
                 return RepPhase.READY
             elif elbow_angle <= 120:
                 return RepPhase.BOTTOM
-            elif self.current_phase == RepPhase.READY:
+            elif self.current_phase in [RepPhase.READY, RepPhase.DESCENDING]:
                 return RepPhase.DESCENDING
             else:
                 return RepPhase.ASCENDING
@@ -335,10 +335,10 @@ class PoseDetection:
         arm_body = rep_data.min_angles.get("arm_body_angle", 90)
         
         # Check elbow bend depth
-        if min_elbow > 100:
-            errors.append(f"Range issue: Min elbow angle {min_elbow:.1f}° (target: ~90°)")
-        elif min_elbow < 60:
-            warnings.append(f"Deep press: Min elbow angle {min_elbow:.1f}°")
+        if min_elbow > criteria["elbow_max"]:
+            errors.append(f"Lower bar to chest level") # ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)
+        elif min_elbow < criteria["elbow_min"]:
+            warnings.append(f"Very deep press")
         
         # Check back stability
         if back_angles:
@@ -348,11 +348,16 @@ class PoseDetection:
             elif avg_back > 175:
                 errors.append(f"Back too flat: Avg back angle {avg_back:.1f}° (target: 140-175°)")
         
-        # Check arm angle from body
-        if arm_body < 35:
-            errors.append(f"Narrow grip: Min arm angle {arm_body:.1f}° (target: 45-75°)")
-        elif arm_body > 85:
-            warnings.append(f"Wide grip: Min arm angle {arm_body:.1f}°")
+        # Check arm angle from body (not too wide)
+        if arm_body < criteria["arm_angle_min"]:
+            errors.append(f"Arms too close to body: Widen your grip") # (arm angle {arm_body:.0f}°)
+        elif arm_body > criteria["arm_angle_max"]:
+            errors.append(f"Arms too wide: Narrow your grip")
+        
+        # Check bar path (wrist should move vertically)
+        if "wrist" in rep_data.phase_angles:
+            # This would require tracking horizontal movement - simplified for now
+            warnings.append("Ensure bar path is straight up and down")
         
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.BENCH_PRESS, errors, warnings)
@@ -370,24 +375,27 @@ class PoseDetection:
         shoulder_angles = rep_data.phase_angles.get("shoulder", [])
         
         # Check elbow bend depth
-        if min_elbow > 100:
-            errors.append(f"Depth issue: Min elbow angle {min_elbow:.1f}° (target: ~90°)")
-        elif min_elbow < 60:
-            warnings.append(f"Deep push-up: Min elbow angle {min_elbow:.1f}°")
+        if min_elbow > criteria["elbow_max"]:
+            errors.append(f"Lower chest to ground") # ({criteria['elbow_min']}-{criteria['elbow_max']}° elbow, achieved {min_elbow:.0f}°)
+        elif min_elbow < criteria["elbow_min"]:
+            warnings.append(f"Very deep push-up")
         
-        # Check body alignment (hip angle should stay straight)
-        if hip_angles:
-            avg_hip = np.mean(hip_angles)
-            if avg_hip < 155:
-                errors.append(f"Sagging hips: Avg hip angle {avg_hip:.1f}° (target: >155°)")
-            elif avg_hip > 180:
-                errors.append(f"Hips too high: Avg hip angle {avg_hip:.1f}° (target: 155-180°)")
+        # Check back/body alignment (hip angle should stay relatively straight)
+        if back_angles:
+            avg_back = np.mean(back_angles)
+            if avg_back < criteria["back_min"]:
+                errors.append(f"Keep core tigh") # (hip angle {avg_back:.0f}°, target {criteria['back_min']}°+)
+            elif avg_back > criteria["back_max"]:
+                errors.append(f"Lower hips for straight line")
         
         # Check shoulder stability
         if shoulder_angles:
             avg_shoulder = np.mean(shoulder_angles)
-            if avg_shoulder < 145:
-                errors.append(f"Shoulder instability: Avg angle {avg_shoulder:.1f}° (target: >145°)")
+            if avg_shoulder < criteria["shoulder_stability_min"]:
+                errors.append(f"Keep shoulder blades retracted") # (detected {avg_shoulder:.0f}°)
+        
+        # Check arm placement (should be roughly shoulder-width)
+        warnings.append("Ensure hands are shoulder-width apart")
         
         is_correct = len(errors) == 0
         feedback = self._generate_feedback(ExerciseType.PUSHUP, errors, warnings)
@@ -423,6 +431,10 @@ class PoseDetection:
         - evaluation_result: FormEvaluation if rep completed, None otherwise
         - warning_message: Warning if landmarks missing, None otherwise
         """
+        # Auto-reset if exercise has changed
+        if self.current_exercise != exercise:
+            self.reset()
+        
         self.current_exercise = exercise
         
         # Check required landmarks
@@ -545,6 +557,10 @@ class PoseDetection:
         self.rep_count = 0
         self.current_rep = None
         self.completed_reps = []
+        self.back_window.clear()
+        self.last_angles.clear()
+        self.bottom_hold_counter = 0
+        self.shoulder_warning_cooldown = 0
 
 
 # Example usage

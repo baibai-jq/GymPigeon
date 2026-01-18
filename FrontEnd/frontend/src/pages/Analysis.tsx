@@ -192,6 +192,46 @@ function Analysis() {
           </div>
         )}
       </div>
+
+      {/* Feedback Panel */}
+      {lastEvaluation && (
+        <div style={{
+          position: 'absolute',
+          bottom: 80,
+          left: 20,
+          right: 20,
+          backgroundColor: 'rgba(0, 0, 0, 0.8)',
+          color: 'white',
+          padding: '15px',
+          borderRadius: '8px',
+          fontSize: '14px',
+          zIndex: 10
+        }}>
+          <div style={{ marginBottom: '8px', fontWeight: 'bold' }}>
+            Rep #{lastEvaluation.rep_number} - {lastEvaluation.is_correct ? '✓ GOOD' : '✗ CHECK FORM'}
+          </div>
+          {lastEvaluation.errors && lastEvaluation.errors.length > 0 && (
+            <div style={{ color: '#ff6b6b', marginBottom: '8px' }}>
+              Issues:
+              <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
+                {lastEvaluation.errors.slice(0, 2).map((err: string, i: number) => (
+                  <li key={i}>{err}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {lastEvaluation.warnings && lastEvaluation.warnings.length > 0 && (
+            <div style={{ color: '#ffd93d' }}>
+              Tips:
+              <ul style={{ margin: '5px 0', paddingLeft: '20px' }}>
+                {lastEvaluation.warnings.slice(0, 1).map((warn: string, i: number) => (
+                  <li key={i}>{warn}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
