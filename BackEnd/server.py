@@ -1,19 +1,3 @@
-# from fastapi import FastAPI, WebSocket
-# import asyncio
-
-# app = FastAPI()
-
-# @app.websocket("/ws")
-# async def websocket_endpoint(websocket: WebSocket):
-#     await websocket.accept()
-#     try:
-#         while True:
-#             # Receive message from React client
-#             data = await websocket.receive_text()
-#             # Send response back to React client
-#             await websocket.send_text(f"Server received: {data}")
-#     except Exception as e:
-#         print(f"Connection closed: {e}")
 
 import cv2
 import mediapipe as mp
@@ -25,25 +9,6 @@ from landmarks import PoseTracker, print_visible_landmarks
 import numpy as np
 
 app = FastAPI()
-
-# --- Helper Function (Copied from BackEnd/main.py) ---
-# def draw_skeleton(frame, key, side_color=(255, 0, 0)):
-#     h, w, _ = frame.shape
-#     pts = {}
-#     for name, p in key.__dict__.items():
-#         if p.visibility >= 0.5:
-#             cx, cy = int(p.x * w), int(p.y * h)
-#             pts[name] = (cx, cy)
-#             cv2.circle(frame, (cx, cy), 6, side_color, -1)
-
-#     connections = [
-#         ("shoulder", "elbow"), ("elbow", "wrist"),
-#         ("shoulder", "hip"), ("hip", "knee"), ("knee", "ankle"),
-#     ]
-
-#     for a, b in connections:
-#         if a in pts and b in pts:
-#             cv2.line(frame, pts[a], pts[b], side_color, 3)
 
 def calculate_angle(a, b, c):
     """
@@ -249,13 +214,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
             # 2. Draw Skeleton on the original BGR frame
             if result.pose_landmarks:
-                # right_key = tracker.extract_key_landmarks(result, side="right")
-                # if right_key:
-                #     draw_skeleton(frame, right_key, side_color=(255, 0, 0))
                 
-                # left_key = tracker.extract_key_landmarks(result, side="left")
-                # if left_key:
-                #     draw_skeleton(frame, left_key, side_color=(0, 0, 255))
                 angles = draw_skeleton(frame, result, tracker)
 
 
