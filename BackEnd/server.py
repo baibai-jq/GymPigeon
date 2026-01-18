@@ -64,7 +64,7 @@ def draw_skeleton_with_feedback(frame, points, warning_message, evaluation, exer
         
         y_pos = 80
         for line in lines[:3]:  # Max 3 lines
-            cv2.putText(frame, line.strip(), (20, y_pos),
+            cv2.putText(frame, line.strip(), (30, y_pos),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
             y_pos += 30
         
@@ -257,6 +257,10 @@ async def websocket_endpoint(websocket: WebSocket):
                         "feedback": evaluation.feedback_message
                     }
                     # Send evaluation as JSON with a prefix to distinguish it
+                    #
+                    #cv2.putText(frame, f"rep_number: {eval_data['rep_number']} \n is_correct: {eval_data['is_correct']} \n \
+                    #            errors: {eval_data['errors']} \n warnings: {eval_data['warnings']}", 
+                    #    (100, controls_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
                     await websocket.send_text("EVAL:" + json.dumps(eval_data))
                 
                 # Draw skeleton with feedback
@@ -267,15 +271,15 @@ async def websocket_endpoint(websocket: WebSocket):
                 
             else:
                 # No pose detected
-                cv2.putText(frame, "No Pose Detected", (10, 30), 
+                cv2.putText(frame, "No Pose Detected", (50, 30), 
                             cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                cv2.putText(frame, "Stand in frame - side view", (10, 70), 
+                cv2.putText(frame, "Stand in frame - side view", (50, 70), 
                             cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 1)
 
             # Controls info
             controls_y = frame.shape[0] - 30
             cv2.putText(frame, f"Current: {current_exercise.value.replace('_', ' ').title()}", 
-                        (10, controls_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
+                        (50, controls_y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
 
             # Encode frame to JPEG
             success, buffer = cv2.imencode('.jpg', frame)
